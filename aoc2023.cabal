@@ -64,6 +64,8 @@ executable day08
     main-is:              Day08.hs
     other-modules:        PressXToParse, PressXToSolve
     build-depends:        base
+                        , containers
+                        , unordered-containers
                         , parsec
 
 executable day09
