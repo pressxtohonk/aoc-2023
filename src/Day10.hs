@@ -92,6 +92,47 @@ distinct :: Eq a => [a] -> Bool
 distinct (x:xs) = (x `notElem` xs) && distinct xs
 distinct _ = True
 
+getLoop :: [(SourcePos, Pipe)] -> Maybe (Map (Int, Int) Pipe)
+getLoop ((pos, Start):pipes) = go (Map.singleton (rc pos) Start) pipes
+  where
+    go :: Map (Int, Int) Pipe -> [(SourcePos, Pipe)] -> Maybe (Map (Int, Int) Pipe)
+    go acc pipes = case pipes of
+      ((pos, Start):xs) -> Just acc
+      ((pos, pipe):xs) -> go (Map.insert (rc pos) pipe acc) xs 
+      _ -> Nothing
+    rc pos = (sourceLine pos, sourceColumn pos)
+getLoop _ = error "getLoop must start from a `Start` pipe"
+
+-- This idea doesn't work consistently around corners (C vs Z)
+numEnclosed :: Int -> Int -> Map (Int, Int) Pipe -> Int
+numEnclosed nrow ncol pipes = sum $ go (Nothing, False) 1 <$> [1..ncol]
+  where
+    go :: (Maybe Pipe, Bool) -> Int -> Int -> Int
+    go state@(_, isEnclosed) r c = case Map.lookup (r, c) pipes of
+      Nothing 
+        | r <= nrow -> go state (r+1) c + if isEnclosed then 1 else 0
+        | otherwise -> 0
+      Just pipe
+        | pipe == EW -> go state' (r+1) c
+        | pipe == NS -> go state'(r+1) c
+        | pipe `elem` [EW, NE, NW] -> go state' (r+1) c
+        | pipe `elem` [NS, SE, SW] -> go state' (r+1) c
+        | pipe == Start -> go (update SW state) (r+1) c -- Start is SW
+        | otherwise -> error $ "unrecognised pipe: " ++ show pipe
+        where state' = update pipe state
+
+update :: Pipe -> (Maybe Pipe, Bool) -> (Maybe Pipe, Bool)
+update pipe (prev, isEnclosed) = case (prev, pipe) of
+  (Nothing, SE) -> (Just SE, not isEnclosed)
+  (Nothing, SW) -> (Just SW, not isEnclosed)
+  (Nothing, EW) -> (Nothing, not isEnclosed)
+  (Just SW, NW) -> (Nothing, not isEnclosed)
+  (Just SE, NE) -> (Nothing, not isEnclosed)
+  (Just SW, NE) -> (Nothing, isEnclosed)
+  (Just SE, NW) -> (Nothing, isEnclosed)
+  (Just _, NS) -> (prev, isEnclosed)
+  _ -> error $ "Unhandled case: " ++ show (prev, pipe)
+
 solve1 :: Solver
 solve1 input = show $ 1 + length (takeWhile distinct (tail steps))
   where
@@ -106,17 +147,19 @@ solve1 input = show $ 1 + length (takeWhile distinct (tail steps))
       ]
 
 solve2 :: Solver
-solve2 input = show steps
+solve2 input = show $ numEnclosed nrow ncol loop
   where
     pipes = mustParse grid input
+    board = mustParse block input
+    nrow = length board
+    ncol = length (head board)
     nodes = Map.fromList pipes
     start = head [ (pos, Start) | (pos, Start) <- pipes ]
-    steps = transpose
-      [ walkN nodes start
-      , walkS nodes start
-      , walkE nodes start
-      , walkW nodes start
-      ]
+    loop = Map.fromList [((r, c), pipe)
+                        | (pos, pipe) <- walkS nodes start
+                        , let r = sourceLine pos
+                        , let c = sourceColumn pos
+                        ]
 
 main :: IO ()
 main = runCLI solve1 solve2
