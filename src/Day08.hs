@@ -1,85 +1,60 @@
 module Main where
 
+import Data.List (cycle, isSuffixOf, scanl)
+import Data.Map (Map, (!))
+import qualified Data.Map as Map
 import PressXToParse
 import PressXToSolve (Solver, runCLI)
-import Text.Parsec
+import Text.Parsec (alphaNum, choice, many, manyTill, newline, string, try)
 
-import Data.HashMap.Strict (HashMap, (!))
-import qualified Data.HashMap.Strict as HashMap
+data Dir = L | R deriving (Show)
 
-data Inst = L | R deriving (Show, Eq)
+instructionP :: Parser Dir
+instructionP =
+  choice . map try $
+    [ L <$ string "L",
+      R <$ string "R"
+    ]
 
-type Node = String
-type Network = HashMap Node (Node, Node)
+branchP :: Parser (String, String, String)
+branchP = do
+  label <- alphaNum `manyTill` string " = ("
+  nodeL <- alphaNum `manyTill` string ", "
+  nodeR <- alphaNum `manyTill` string ")\n"
+  return (label, nodeL, nodeR)
 
-inst :: Parser [Inst]
-inst = many $ choice [L <$ char 'L', R <$ char 'R']
+mapP :: Parser ([Dir], [Trio String])
+mapP = do
+  instructions <- instructionP `manyTill` eol
+  newline
+  branches <- many branchP
+  return (instructions, branches)
 
-node :: Parser Node
-node = count 3 alphaNum
+toTree :: [Trio String] -> Map String (Pair String)
+toTree = Map.fromList . map (\(a, l, r) -> (a, (l, r)))
 
-edge :: Parser (Node, (Node, Node))
-edge = do
-  source <- node
-  string " = ("
-  targets <- (,) <$> node <* string ", " <*> node 
-  char ')'
-  return (source, targets)
-
-network :: Parser ([Inst], Network)
-network = do
-  sections <- blocks
-  case sections of
-    [instTxt, edgeTxt] -> 
-      return (insts, HashMap.fromList edges)
-        where
-          insts = mustParse inst (unlines instTxt)
-          edges = mustParse (linesOf edge) (unlines edgeTxt)
-    _ -> error $ "error parsing sections: " ++ show sections
-
-walk :: Node -> ([Inst], Network) -> [Node]
-walk src (insts, net) = f src (cycle insts)
+walk :: Map String (Pair String) -> [Dir] -> String -> [String]
+walk nodes dirs node = scanl step node (cycle dirs)
   where
-    f i (x:xs)
-      | x == L = i : f (fst $ net ! i) xs
-      | x == R = i : f (snd $ net ! i) xs
+    step :: String -> Dir -> String
+    step x L = fst (nodes ! x)
+    step x R = snd (nodes ! x)
 
-walk' :: [Node] -> ([Inst], Network) -> Int
-walk' srcs (insts, net) = f 0 srcs (cycle insts)
+path :: String -> String -> ([Dir], [Trio String]) -> [String]
+path source target (dirs, branches) = takeWhile (/= target) $ walk (toTree branches) dirs source
+
+paths :: (String -> Bool) -> (String -> Bool) -> ([Dir], [Trio String]) -> [[String]]
+paths source target (dirs, branches) = takeWhile (not . target) . walk tree dirs <$> sources
   where
-    f acc ns (x:xs)
-      | p ns = acc
-      | x == L  = f (acc+1) (map l ns) xs
-      | x == R  = f (acc+1) (map r ns) xs
-    p = all (\n -> last n == 'Z')
-    l = fst . (net !)
-    r = snd . (net !)
-
-zipMany :: [[String]] -> [[String]]
-zipMany lists = map head lists : zipMany (map tail lists)
-
-numTill :: (a -> Bool) -> [a] -> Int
-numTill p [] = error "condition never met"
-numTill p (x:xs)
-  | not (p x) = 1 + numTill p xs
-  | otherwise = 0
-
+    tree = toTree branches
+    sources = filter source (Map.keys tree)
 
 solve1 :: Solver
-solve1 = show 
-       . length
-       . takeWhile (/="ZZZ") 
-       . walk "AAA"
-       . mustParse network
+solve1 = show . length . path "AAA" "ZZZ" . mustParse mapP
 
--- leaks memory somewhere ):
+-- LCM works as all paths cycle with exactly one (..A) node and one (..Z) node
 solve2 :: Solver
-solve2 input = show $ walk' inits (insts, net)
-  where
-    (insts, net) = mustParse network input
-    inits = [ n | n <- HashMap.keys net, last n == 'A' ]
-    -- walks = [ walk n (insts, net) | n <- inits ]
-    -- steps = zipMany walks
+solve2 = show . foldr (lcm . length) 1 . paths ("A" `isSuffixOf`) ("Z" `isSuffixOf`) . mustParse mapP
 
 main :: IO ()
 main = runCLI solve1 solve2

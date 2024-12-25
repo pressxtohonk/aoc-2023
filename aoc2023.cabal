@@ -65,7 +65,6 @@ executable day08
     other-modules:        PressXToParse, PressXToSolve
     build-depends:        base
                         , containers
-                        , unordered-containers
                         , parsec
 
 executable day09
