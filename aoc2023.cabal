@@ -96,6 +96,7 @@ executable day12
     main-is:              Day12.hs
     other-modules:        PressXToParse, PressXToSolve
     build-depends:        base
+                        , MemoTrie
                         , parsec
 
 executable day13
