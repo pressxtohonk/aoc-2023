@@ -17,7 +17,12 @@ dijkstra step zero start done = shortestPaths
     forward done step prevs queue = case Map.minViewWithKey queue of
       Just ((cost, branches), queue) | not (any (any (\(_, _, n) -> done n)) prevs) -> forward done step prevs' queue'
         where
-          updatePrevs branch@(cost, prev, curr) = Map.insertWith (++) curr [branch]
+          push [] a = a
+          push a [] = a
+          push a@((ca, _ ,_):_) b@((cb, _ ,_):_)
+            | ca < cb = a
+            | otherwise = b
+          updatePrevs branch@(cost, prev, curr) = Map.insertWith push curr [branch]
           updateQueue branch@(cost, curr, next) = Map.insertWith (++) cost [branch]
           prevs' = foldr updatePrevs prevs branches -- Update backpointers for all branches with the current cost
           queue' = foldr updateQueue queue branches' -- Enqueue new branches from all previously unvisited nodes
