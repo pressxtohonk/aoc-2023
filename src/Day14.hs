@@ -1,39 +1,61 @@
 module Main where
 
+import Data.Map ((!))
+import qualified Data.Map as Map
 import qualified PressXToGrids as Grid
 import PressXToParse
 import PressXToSolve (Solver, runCLI)
-import Data.List (partition, groupBy)
+import Data.List (partition, groupBy, foldl')
 
 dishP :: Parser (Grid.Grid Char)
 dishP = block
 
-flush :: Char -> String -> String
-flush c = uncurry (++) . partition (==c)
-
-flushAll :: Char -> String -> String
-flushAll c = concatMap (flush c) . groupBy cmp
+flush :: [String] -> [String]
+flush = map flushRow
   where
-    -- groupBy hack to find all groups without walls
+    flushRow = concatMap flushGrp . groupBy cmp
+    flushGrp = uncurry (++) . partition (=='O')
     cmp slow fast = slow /= '#' && fast /= '#'
 
-load :: Char -> String -> [Int]
-load c xs = [if x == c then n-i else 0 | (i, x) <- zip [0..] xs]
+load :: [String] -> [[Int]]
+load = map rowLoad
   where
-    n = length xs
+    rowLoad xs = [if x == 'O' then n-i else 0 | (i, x) <- zip [0..] xs]
+      where
+        n = length xs
 
--- applies a row-wise operation to each column of a grid by rotating it anticlockwise
-mapU :: ([a] -> [b]) -> [[a]] -> [[b]]
-mapU f =  Grid.r1 . map f . Grid.r3
+cycleDish :: [String] -> [String]
+cycleDish grid = foldl' (flip ($)) grid ops
+  where
+    ops = replicate 4 (Grid.r1 . flush)
+
+-- optimized w cycle detection
+cycleDish' :: Int -> [String] -> [String]
+cycleDish' n grid = foldl' (flip ($)) grid ops
+  where
+    (i, j) = detectCycle cycleDish grid
+    n' = ((n - i) `mod` (j - i)) + i
+    ops = replicate n' cycleDish
+
+detectCycle :: Ord a => (a -> a) -> a -> (Int, Int)
+detectCycle = go Map.empty
+  where
+    go acc f x
+      | Map.member x acc = (acc ! x, n)
+      | otherwise = go (Map.insert x n acc) f (f x)
+      where
+        n = Map.size acc
 
 sum2D :: Num a => [[a]] -> a
 sum2D = sum . map sum
 
 solve1 :: Solver
-solve1 = show . sum2D . mapU (load 'O' . flushAll 'O') . mustParse dishP
+solve1 = show . sum2D . load . flush . Grid.r3 . mustParse dishP
 
 solve2 :: Solver
-solve2 = show
+solve2 = show . sum2D . load . cycleDish' 1000000000 . Grid.r3 . mustParse dishP
+
+
 
 main :: IO ()
 main = runCLI solve1 solve2

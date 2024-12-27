@@ -111,6 +111,7 @@ executable day14
     main-is:              Day14.hs
     other-modules:        PressXToGrids, PressXToParse, PressXToSolve
     build-depends:        base
+                        , containers
                         , parsec
 
 executable day15
