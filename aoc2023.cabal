@@ -109,7 +109,7 @@ executable day13
 executable day14
     hs-source-dirs:       src
     main-is:              Day14.hs
-    other-modules:        PressXToParse, PressXToSolve
+    other-modules:        PressXToGrids, PressXToParse, PressXToSolve
     build-depends:        base
                         , parsec
 
