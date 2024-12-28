@@ -91,11 +91,44 @@ filterAccepted workflows = filter $ (["A"] `isPrefixOf`) . run workflows
 rating :: Part -> Int
 rating (x, m, a, s) = x + m + a + s
 
+countAccepted :: Workflows -> [Part] -> Int
+countAccepted workflows _ = go "in" (1, 1, 1, 1) (4000, 4000, 4000, 4000)
+  where
+    go :: String -> Part -> Part -> Int
+    go label lb@(x1, m1, a1, s1) ub@(x2, m2, a2, s2)
+      | x1 > x2 || m1 > m2 || a1 > a2 || s1 > s2 = 0
+      | label == "A" = numBetween lb ub
+      | label == "R" = 0
+      | otherwise = case Map.lookup label workflows of
+          Just rules -> go' lb ub rules
+          _ -> 0
+
+    -- This sucks but,,,
+    go' :: Part -> Part -> [Rule] -> Int
+    go' lb@(x1, m1, a1, s1) ub@(x2, m2, a2, s2) (rule:rest) = case rule of
+      IfGT X val next -> go next (val+1, m1, a1, s1) ub + go' lb (val, m2, a2, s2) rest
+      IfGT M val next -> go next (x1, val+1, a1, s1) ub + go' lb (x2, val, a2, s2) rest
+      IfGT A val next -> go next (x1, m1, val+1, s1) ub + go' lb (x2, m2, val, s2) rest
+      IfGT S val next -> go next (x1, m1, a1, val+1) ub + go' lb (x2, m2, a2, val) rest
+      IfLT X val next -> go next lb (val-1, m2, a2, s2) + go' (val, m1, a1, s1) ub rest
+      IfLT M val next -> go next lb (x2, val-1, a2, s2) + go' (x1, val, a1, s1) ub rest
+      IfLT A val next -> go next lb (x2, m2, val-1, s2) + go' (x1, m1, val, s1) ub rest
+      IfLT S val next -> go next lb (x2, m2, a2, val-1) + go' (x1, m1, a1, val) ub rest
+      Goto next -> go next lb ub
+
+numBetween :: Part -> Part -> Int
+numBetween (x1, m1, a1, s1) (x2, m2, a2, s2) = dx * dm * da * ds
+  where
+    dx = max 0 (x2 - x1 + 1)
+    dm = max 0 (m2 - m1 + 1)
+    da = max 0 (a2 - a1 + 1)
+    ds = max 0 (s2 - s1 + 1)
+
 solve1 :: Solver
 solve1 = show . sum . map rating . uncurry filterAccepted . mustParse inputP
 
 solve2 :: Solver
-solve2 = show
+solve2 = show . uncurry countAccepted . mustParse inputP
 
 main :: IO ()
 main = runCLI solve1 solve2
