@@ -182,6 +182,8 @@ executable day22
     main-is:              Day22.hs
     other-modules:        PressXToParse, PressXToSolve
     build-depends:        base
+                        , containers
+                        , mtl
                         , parsec
 
 executable day23
